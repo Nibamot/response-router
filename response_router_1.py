@@ -53,7 +53,7 @@ class Publisher(MessagingHandler):
         if self.sender_buffer and self.sender.credit:
             message_body = self.sender_buffer.pop(0)
             general_log.debug('sending something... %s' % message_body)
-            message = Message(body=message_body, properties={'Car_ID':self.car_to_send, 'ref_timestamp_fc':self.json_to_parse["ref_timestamp_fc"]})#
+            message = Message(body=message_body, properties={'Car_ID':self.car_to_send, 'ref_timestamp_fc':"0.0"})# self.json_to_parse["ref_timestamp_fc"]
             message.durable = True
             self.sender.send(message)
             time_log.info("In Response router it takes "+str((time.time()-self.rr_time_start)*1000)+" ms to send")

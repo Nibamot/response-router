@@ -94,6 +94,7 @@ class MS_ApiServer(RequestHandler):
         """Handles the behaviour of POST calls from the maneuvering service suggestion to car"""
         #self.write(json.loads(self.request.body))
         json_form = json.loads(self.request.body)
+        self.write(json_form)
 
         for ind_msg in json_form["messages"]:
             client_pub.json_to_parse = ind_msg

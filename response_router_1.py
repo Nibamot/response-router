@@ -1,3 +1,4 @@
+import os
 import json
 import time
 import logging
@@ -15,7 +16,7 @@ from tornado.ioloop import IOLoop
 
 formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
 
-def logger_setup(name, file_name, level=logging.DEBUG):
+def logger_setup(name, file_name, level=os.environ['LOG_LEVEL']):
     """Setup different loggers here"""
 
     file_handler = logging.FileHandler(file_name)
@@ -26,7 +27,7 @@ def logger_setup(name, file_name, level=logging.DEBUG):
 
     return logger
 
-general_log = logger_setup(' Response Router 1 ','/logs/rr1.log')
+general_log = logger_setup(os.environ['LOGGER_NAME'],os.environ['LOG_PATH_GENERAL'])
 time_log = logger_setup(' Timing Response Router 1 ','/logs/rr1time.log')
 
 #############################################################################################
@@ -169,14 +170,14 @@ def make_app():
 if __name__ == '__main__':
 
   app = make_app()
-  app.listen(3000)
+  app.listen(os.environ['API_PORT'])
   print("Started Response Router 1 REST Server")
-  client_pub = Publisher("message-broker-1-service.clm-test.empower:5672")
+  client_pub = Publisher(os.environ['MSG_BROKER_ADDR'])
   container = Container(client_pub)
   events = EventInjector()
   container.selectable(events)
   qpid_thread = Thread(target=container.run)
-  client_pub.send_topic = ["TO_CARS"]
+  client_pub.send_topic = [os.environ['SEND_TOPIC']]
   qpid_thread.start()
   IOLoop.instance().start()
   

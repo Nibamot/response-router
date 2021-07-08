@@ -109,10 +109,11 @@ class MS_ApiServer(RequestHandler):
   
     def put(self, id):
         """Handles the behaviour of PUT calls"""
-        global items
-        new_items = [item for item in items if item['id'] is not int(id)]
-        items = new_items
-        self.write({'message': 'Item with id %s was updated' % id})
+        pass
+
+    def get(self, id):
+        """Handles the behaviour of GET calls"""
+        self.write("Were you supposed to GET something?")
 
 
     def delete(self, id):

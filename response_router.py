@@ -16,19 +16,33 @@ from tornado.ioloop import IOLoop
 
 formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
 
-def logger_setup(name, file_name, level=os.environ['LOG_LEVEL']):
+def logger_setup(name, level=os.environ['LOG_LEVEL']):
     """Setup different loggers here"""
+
+    sh = logging.StreamHandler()
+    sh.setFormatter(formatter)
+    logger = logging.getLogger(name)
+    logger.setLevel(level)
+    logger.addHandler(sh)
+
+    return logger
+
+def logger_file_setup(name, file_name, level=os.environ['LOG_LEVEL']):
+    """Setup different file-loggers here"""
 
     file_handler = logging.FileHandler(file_name)
     file_handler.setFormatter(formatter)
     logger = logging.getLogger(name)
     logger.setLevel(level)
     logger.addHandler(file_handler)
-
+    
     return logger
 
-general_log = logger_setup(os.environ['LOGGER_NAME'],os.environ['LOG_PATH_GENERAL'])
-time_log = logger_setup(' Timing Response Router 1 ','/logs/rr1time.log')
+general_log = logger_setup(os.environ['LOGGER_NAME'])
+time_log = logger_setup(' Timing Response Router 1 ')
+
+#general_log = logger_setup(os.environ['LOGGER_NAME'],os.environ['LOG_PATH_GENERAL'])
+#time_log = logger_setup(' Timing Response Router 1 ','/logs/rr1time.log')
 
 #############################################################################################
 ################################ Logging #################################

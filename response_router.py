@@ -118,7 +118,6 @@ class MS_ApiServer(RequestHandler):
         for ind_msg in json_form["messages"]:
             client_pub.json_to_parse = ind_msg
             client_pub.car_to_send = ind_msg["Car_ID"]
-            print(client_pub.car_to_send)
             client_pub.sender_buffer.append(client_pub.details()[0])
             client_pub.sender_buffer.append(client_pub.details()[1])
             events.trigger(ApplicationEvent("my_custom_send"))

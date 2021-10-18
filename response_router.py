@@ -68,9 +68,11 @@ class Publisher(MessagingHandler):
 
     def on_my_custom_send(self, event):
         if self.sender_buffer and self.sender.credit:
+            car_id_send = self.sender_buffer.pop(0)
             message_body = self.sender_buffer.pop(0)
             general_log.debug('sending something... %s' % message_body)
-            message = Message(body=message_body, properties={'Car_ID':self.car_to_send, 'ref_timestamp_fc':self.json_to_parse["ref_timestamp_fc"]}) 
+            general_log.debug('CAR ID... %s' % car_id_send)
+            message = Message(body=message_body, properties={'Car_ID':car_id_send})#, 'ref_timestamp_fc':self.json_to_parse["ref_timestamp_fc"]}) 
             message.durable = True
             self.sender.send(message)
             time_log.info("In Response router it takes "+str((time.time()-self.rr_time_start)*1000)+" ms to send")
@@ -116,6 +118,8 @@ class MS_ApiServer(RequestHandler):
         for ind_msg in json_form["messages"]:
             client_pub.json_to_parse = ind_msg
             client_pub.car_to_send = ind_msg["Car_ID"]
+            print(client_pub.car_to_send)
+            client_pub.sender_buffer.append(client_pub.details()[0])
             client_pub.sender_buffer.append(client_pub.details()[1])
             events.trigger(ApplicationEvent("my_custom_send"))
             
@@ -196,4 +200,3 @@ if __name__ == '__main__':
   client_pub.send_topic = [os.environ['SEND_TOPIC']]
   qpid_thread.start()
   IOLoop.instance().start()
-  

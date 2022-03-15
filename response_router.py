@@ -2,7 +2,6 @@ import os
 import json
 import time
 import logging
-from time import sleep
 from threading import Thread
 from proton import Message
 from proton.handlers import MessagingHandler
@@ -91,6 +90,7 @@ class Publisher(MessagingHandler):
             payload_details.append(stations_id)
             payload_details.append(msg_payload)
             return payload_details
+
         elif self.json_to_parse!={} and "EP" in self.json_to_parse:
             dummy_msg = self.json_to_parse["EP"]
             stations_id = self.json_to_parse["Car_ID"]
@@ -98,6 +98,7 @@ class Publisher(MessagingHandler):
             payload_details.append(stations_id)
             payload_details.append(msg_payload)
             return payload_details
+            
         else:
             return payload_details
 
@@ -111,21 +112,25 @@ class Publisher(MessagingHandler):
 class MS_ApiServer(RequestHandler):
     def post(self, id):
         """Handles the behaviour of POST calls from the maneuvering service suggestion to car"""
-        #self.write(json.loads(self.request.body))
+        rr_time_start = time.time()
         json_form = json.loads(self.request.body)
-        self.write(json_form)
-
+        
         for ind_msg in json_form["messages"]:
-            client_pub.json_to_parse = ind_msg
-            client_pub.car_to_send = ind_msg["Car_ID"]
-            client_pub.sender_buffer.append(client_pub.details()[0])
-            client_pub.sender_buffer.append(client_pub.details()[1])
-            events.trigger(ApplicationEvent("my_custom_send"))
-            
-        #client_pub.json_to_parse = json_form
-        #client_pub.car_to_send = client_pub.json_to_parse["Car_ID"]
-        #client_pub.sender_buffer.append(client_pub.details()[1])
-        #events.trigger(ApplicationEvent("my_custom_send"))
+            client_pub_one.json_to_parse = ind_msg
+            client_pub_one.rr_time_start = rr_time_start
+            client_pub_one.car_to_send = client_pub_one.json_to_parse["Car_ID"]
+            client_pub_one.sender_buffer.append(client_pub_one.details()[0])
+            client_pub_one.sender_buffer.append(client_pub_one.details()[1])
+            events_one.trigger(ApplicationEvent("my_custom_send"))
+        
+            # tentative 
+            client_pub_two.json_to_parse = ind_msg
+            client_pub_two.rr_time_start = rr_time_start
+            client_pub_two.car_to_send = client_pub_two.json_to_parse["Car_ID"]
+            client_pub_two.sender_buffer.append(client_pub_two.details()[0])
+            client_pub_two.sender_buffer.append(client_pub_two.details()[1])
+            events_two.trigger(ApplicationEvent("my_custom_send"))
+        self.write((str((time.time()-rr_time_start)*1000))+" ms to process in RR")
   
     def put(self, id):
         """Handles the behaviour of PUT calls"""
@@ -152,14 +157,25 @@ class MS_ApiServer(RequestHandler):
 class LM_ApiServer(RequestHandler):
     def post(self, id):
         """Handles the behaviour of POST calls from the local manager"""
-        json_form = json.loads(self.request.body)
-        self.write(json_form)
         rr_time_start = time.time()
-        client_pub.json_to_parse = json_form
-        client_pub.rr_time_start = rr_time_start
-        client_pub.car_to_send = client_pub.json_to_parse["Car_ID"]
-        client_pub.sender_buffer.append(client_pub.json_to_parse["EP"])
-        events.trigger(ApplicationEvent("my_custom_send"))
+        json_form = json.loads(self.request.body)
+        
+        for ind_msg in json_form["messages"]:
+            client_pub_one.json_to_parse = ind_msg
+            client_pub_one.rr_time_start = rr_time_start
+            client_pub_one.car_to_send = client_pub_one.json_to_parse["Car_ID"]
+            client_pub_one.sender_buffer.append(client_pub_one.details()[0])
+            client_pub_one.sender_buffer.append(client_pub_one.details()[1])
+            events_one.trigger(ApplicationEvent("my_custom_send"))
+        
+            # tentative 
+            client_pub_two.json_to_parse = ind_msg
+            client_pub_two.rr_time_start = rr_time_start
+            client_pub_two.car_to_send = client_pub_two.json_to_parse["Car_ID"]
+            client_pub_two.sender_buffer.append(client_pub_two.details()[0])
+            client_pub_two.sender_buffer.append(client_pub_two.details()[1])
+            events_two.trigger(ApplicationEvent("my_custom_send"))
+        self.write((str((time.time()-rr_time_start)*1000))+" ms to process in RR")
   
     def put(self, id):
         """Handles the behaviour of PUT calls"""
@@ -180,7 +196,7 @@ class LM_ApiServer(RequestHandler):
 def make_app():
   urls = [
     (r"/api/item/from_ms_api/([^/]+)?", MS_ApiServer),
-    (r"/api/item/from_local_mgr_api/([^/]+)?", LM_ApiServer)
+    (r"/api/item/rr_ms_lm/v1/([^/]+)?", LM_ApiServer)
   ]
   return Application(urls, debug=True)
 
@@ -191,11 +207,18 @@ if __name__ == '__main__':
   app = make_app()
   app.listen(os.environ['API_PORT'])
   print("Started Response Router 1 REST Server")
-  client_pub = Publisher(os.environ['MSG_BROKER_ADDR'])
-  container = Container(client_pub)
-  events = EventInjector()
-  container.selectable(events)
-  qpid_thread = Thread(target=container.run)
-  client_pub.send_topic = [os.environ['SEND_TOPIC']]
-  qpid_thread.start()
+  client_pub_one = Publisher(os.environ['MSG_BROKER_ADDR_ONE'])
+  client_pub_two = Publisher(os.environ['MSG_BROKER_ADDR_TWO'])
+  container_one = Container(client_pub_one)
+  container_two = Container(client_pub_two)
+  events_one = EventInjector()
+  events_two = EventInjector()
+  container_one.selectable(events_one)
+  container_two.selectable(events_two)
+  qpid_thread_one = Thread(target=container_one.run)
+  qpid_thread_two = Thread(target=container_two.run)
+  client_pub_one.send_topic = [os.environ['SEND_TOPIC']]
+  client_pub_two.send_topic = [os.environ['SEND_TOPIC']]
+  qpid_thread_one.start()
+  qpid_thread_two.start()
   IOLoop.instance().start()

@@ -2,6 +2,7 @@ import os
 import json
 import time
 import logging
+import threading
 from threading import Thread
 from proton import Message
 from proton.handlers import MessagingHandler
@@ -48,7 +49,7 @@ time_log = logger_setup(' Timing Response Router 1 ')
 #############################################################################################
 
 class Publisher(MessagingHandler):
-    def __init__(self, server):
+    def __init__(self, server, lock_obj):
         super(Publisher, self).__init__()
         self.server = server
         self.json_to_parse =  {}
@@ -59,6 +60,7 @@ class Publisher(MessagingHandler):
         self.rr_time_start = 0
         self.user = os.environ['MSG_BROKER_USER']
         self.password = os.environ['MSG_BROKER_PASSWORD']
+        self.lock_obj = lock_obj
 
     def on_start(self, event):
         conn = event.container.connect(self.server, user=self.user, password=self.password)
@@ -75,6 +77,7 @@ class Publisher(MessagingHandler):
             message.durable = True
             self.sender.send(message)
             time_log.info("In Response router it takes "+str((time.time()-self.rr_time_start)*1000)+" ms to send")
+            self.lock_obj.release()
 
     def on_sendable(self, event):
         """called after the sender is created only as a sender credit is made"""
@@ -166,6 +169,7 @@ class LM_ApiServer(RequestHandler):
             client_pub_one.car_to_send = client_pub_one.json_to_parse["Car_ID"]
             client_pub_one.sender_buffer.append(client_pub_one.details()[0])
             client_pub_one.sender_buffer.append(client_pub_one.details()[1])
+            lock_obj_one.acquire()
             events_one.trigger(ApplicationEvent("my_custom_send"))
         
             # tentative 
@@ -174,8 +178,13 @@ class LM_ApiServer(RequestHandler):
             client_pub_two.car_to_send = client_pub_two.json_to_parse["Car_ID"]
             client_pub_two.sender_buffer.append(client_pub_two.details()[0])
             client_pub_two.sender_buffer.append(client_pub_two.details()[1])
+            lock_obj_two.acquire()
             events_two.trigger(ApplicationEvent("my_custom_send"))
+        lock_obj_one.acquire()
+        lock_obj_two.acquire()
         self.write((str((time.time()-rr_time_start)*1000))+" ms to process in RR")
+        lock_obj_one.release()
+        lock_obj_two.release()
   
     def put(self, id):
         """Handles the behaviour of PUT calls"""
@@ -184,6 +193,9 @@ class LM_ApiServer(RequestHandler):
         items = new_items
         self.write({'message': 'Item with id %s was updated' % id})
 
+    def get(self, id):
+        """Handles the behaviour of GET calls"""
+        self.write("Were you supposed to GET something?")
 
     def delete(self, id):
         """Handles the behaviour of DELETE calls"""
@@ -196,7 +208,7 @@ class LM_ApiServer(RequestHandler):
 def make_app():
   urls = [
     (r"/api/item/from_ms_api/([^/]+)?", MS_ApiServer),
-    (r"/api/item/rr_ms_lm/v1/([^/]+)?", LM_ApiServer)
+    (r"/api/item/messages/([^/]+)?", LM_ApiServer)
   ]
   return Application(urls, debug=True)
 
@@ -207,8 +219,10 @@ if __name__ == '__main__':
   app = make_app()
   app.listen(os.environ['API_PORT'])
   print("Started Response Router 1 REST Server")
-  client_pub_one = Publisher(os.environ['MSG_BROKER_ADDR_ONE'])
-  client_pub_two = Publisher(os.environ['MSG_BROKER_ADDR_TWO'])
+  lock_obj_one = threading.Lock()
+  lock_obj_two = threading.Lock()
+  client_pub_one = Publisher(os.environ['MSG_BROKER_ADDR_ONE'], lock_obj_one)
+  client_pub_two = Publisher(os.environ['MSG_BROKER_ADDR_TWO'], lock_obj_two)
   container_one = Container(client_pub_one)
   container_two = Container(client_pub_two)
   events_one = EventInjector()

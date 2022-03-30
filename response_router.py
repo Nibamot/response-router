@@ -112,6 +112,7 @@ class MS_ApiServer(RequestHandler):
     def post(self, id):
         """Handles the behaviour of POST calls from the maneuvering service suggestion to car"""
         #self.write(json.loads(self.request.body))
+        rr_time_start = time.time()
         json_form = json.loads(self.request.body)
         self.write(json_form)
 
@@ -121,7 +122,7 @@ class MS_ApiServer(RequestHandler):
             client_pub.sender_buffer.append(client_pub.details()[0])
             client_pub.sender_buffer.append(client_pub.details()[1])
             events.trigger(ApplicationEvent("my_custom_send"))
-            
+        self.write((str((time.time()-rr_time_start)*1000))+" ms to process in RR")
         #client_pub.json_to_parse = json_form
         #client_pub.car_to_send = client_pub.json_to_parse["Car_ID"]
         #client_pub.sender_buffer.append(client_pub.details()[1])

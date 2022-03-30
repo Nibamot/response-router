@@ -114,7 +114,7 @@ class MS_ApiServer(RequestHandler):
         #self.write(json.loads(self.request.body))
         rr_time_start = time.time()
         json_form = json.loads(self.request.body)
-        self.write(json_form)
+        
 
         for ind_msg in json_form["messages"]:
             client_pub.json_to_parse = ind_msg
@@ -122,7 +122,8 @@ class MS_ApiServer(RequestHandler):
             client_pub.sender_buffer.append(client_pub.details()[0])
             client_pub.sender_buffer.append(client_pub.details()[1])
             events.trigger(ApplicationEvent("my_custom_send"))
-        self.write((str((time.time()-rr_time_start)*1000))+" ms to process in RR")
+        json_form["rr_process_time"] =  (time.time()-rr_time_start)*1000
+        self.write(json_form)
         #client_pub.json_to_parse = json_form
         #client_pub.car_to_send = client_pub.json_to_parse["Car_ID"]
         #client_pub.sender_buffer.append(client_pub.details()[1])

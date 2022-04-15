@@ -60,7 +60,7 @@ class Publisher(MessagingHandler):
         self.rr_time_start = 0
         self.user = os.environ['MSG_BROKER_USER']
         self.password = os.environ['MSG_BROKER_PASSWORD']
-
+    
     def on_start(self, event):
         conn = event.container.connect(self.server, user=self.user, password=self.password)
         for topic in self.send_topic:

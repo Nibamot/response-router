@@ -60,11 +60,31 @@ class Publisher(MessagingHandler):
         self.rr_time_start = 0
         self.user = os.environ['MSG_BROKER_USER']
         self.password = os.environ['MSG_BROKER_PASSWORD']
+        self.connection = None
     
     def on_start(self, event):
         conn = event.container.connect(self.server, user=self.user, password=self.password)
         for topic in self.send_topic:
             self.sender = event.container.create_sender(conn, 'topic://%s' % topic)
+    
+    def on_disconnected(self, event):
+        general_log.error("The connection to broker is lost. Trying to reestablish the connection")
+        print(str(self.connection)+str("BEFORE\n"))
+        self.connection.close()
+        
+        conn = event.container.connect(self.server, user=self.user, password=self.password)
+        for topic in self.send_topic:
+            self.sender = event.container.create_sender(conn, 'topic://%s' % topic)
+        self.connection = conn
+        return super().on_disconnected(event)
+
+
+    def get_connection_state(self):
+        try:
+            state = self.connection.state
+        except Exception:
+            return 0
+        return state
 
     def on_my_custom_send(self, event):
         if self.sender_buffer and self.sender.credit:
@@ -123,6 +143,7 @@ class MS_ApiServer(RequestHandler):
             client_pub.sender_buffer.append(client_pub.details()[1])
             events.trigger(ApplicationEvent("my_custom_send"))
         json_form["rr_process_time"] =  (time.time()-rr_time_start)*1000
+        json_form["broker_conn_state"] = str(client_pub.get_connection_state())
         self.write(json_form)
         #client_pub.json_to_parse = json_form
         #client_pub.car_to_send = client_pub.json_to_parse["Car_ID"]

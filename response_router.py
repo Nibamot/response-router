@@ -66,6 +66,7 @@ class Publisher(MessagingHandler):
         conn = event.container.connect(self.server, user=self.user, password=self.password)
         for topic in self.send_topic:
             self.sender = event.container.create_sender(conn, 'topic://%s' % topic)
+        self.connection = conn
     
     def on_disconnected(self, event):
         general_log.error("The connection to broker is lost. Trying to reestablish the connection")

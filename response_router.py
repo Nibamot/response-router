@@ -61,6 +61,9 @@ class Publisher(MessagingHandler):
         self.user = os.environ['MSG_BROKER_USER']
         self.password = os.environ['MSG_BROKER_PASSWORD']
         self.connection = None
+        self.timeout_limit_max = 64
+        self.timeout_limit_min = 1
+        self.timeout_limit = 1
     
     def on_start(self, event):
         conn = event.container.connect(self.server, user=self.user, password=self.password)
@@ -71,16 +74,35 @@ class Publisher(MessagingHandler):
     def on_disconnected(self, event):
         general_log.error("The connection to broker is lost. Trying to reestablish the connection")
         self.connection.close()
-        conn = event.container.connect(self.server, user=self.user, password=self.password)
-        for topic in self.send_topic:
-            self.sender = event.container.create_sender(conn, 'topic://%s' % topic)
-        self.connection = conn
+        if self.timeout_limit < self.timeout_limit_max:
+            time.sleep(self.timeout_limit)
+            conn = event.container.connect(self.server, user=self.user, password=self.password)
+            
+            general_log.error("waited for "+str(self.timeout_limit)+" seconds\n")
+            for topic in self.send_topic:
+                self.sender = event.container.create_sender(conn, 'topic://%s' % topic)
+            self.connection = conn
+            self.timeout_limit*=2
+            general_log.error(str(self.get_connection_state())+" connection state\n")
+            
+            
+        else:
+            time.sleep(self.timeout_limit)
+            conn = event.container.connect(self.server, user=self.user, password=self.password)
+
+            general_log.error("waited for "+str(self.timeout_limit)+" seconds\n")
+            for topic in self.send_topic:
+                self.sender = event.container.create_sender(conn, 'topic://%s' % topic)
+            self.connection = conn
+        
         return super().on_disconnected(event)
 
 
     def get_connection_state(self):
         try:
             state = self.connection.state
+            if state == 18:
+                self.timeout_limit = self.timeout_limit_min
         except Exception:
             return 0
         return state
@@ -94,7 +116,7 @@ class Publisher(MessagingHandler):
             message = Message(body=message_body, properties={'Car_ID':car_id_send})#, 'ref_timestamp_fc':self.json_to_parse["ref_timestamp_fc"]}) 
             message.durable = True
             self.sender.send(message)
-            time_log.info("In Response router it takes "+str((time.time()-self.rr_time_start)*1000)+" ms to send")
+            general_log.info("In Response router it takes "+str((time.time()-self.rr_time_start)*1000)+" ms to send")
 
     def on_sendable(self, event):
         """called after the sender is created only as a sender credit is made"""

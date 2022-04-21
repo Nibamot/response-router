@@ -24,6 +24,7 @@ def logger_setup(name, level=os.environ['LOG_LEVEL']):
     logger = logging.getLogger(name)
     logger.setLevel(level)
     logger.addHandler(sh)
+    logger.propagate = False
 
     return logger
 
@@ -61,13 +62,55 @@ class Publisher(MessagingHandler):
         self.user = os.environ['MSG_BROKER_USER']
         self.password = os.environ['MSG_BROKER_PASSWORD']
         self.lock_obj = lock_obj
+        self.connection = None
+        self.timeout_limit_max = 8
+        self.timeout_limit_min = 1
+        self.timeout_limit = 1
 
     def on_start(self, event):
         conn = event.container.connect(self.server, user=self.user, password=self.password)
         for topic in self.send_topic:
             self.sender = event.container.create_sender(conn, 'topic://%s' % topic)
+        self.connection = conn
+    
+    def on_disconnected(self, event):
+        """ Called when the connection between the client and the broker is disconnected """
+
+        general_log.error("The connection to broker is lost. Trying to reestablish the connection")
+        self.connection.close()
+
+        if self.timeout_limit < self.timeout_limit_max:
+            time.sleep(self.timeout_limit)
+            conn = event.container.connect(self.server, user=self.user, password=self.password)
+            general_log.error("waited for "+str(self.timeout_limit)+" seconds\n")
+            for topic in self.send_topic:
+                self.sender = event.container.create_sender(conn, 'topic://%s' % topic)
+            self.connection = conn
+            self.timeout_limit*=2
+            general_log.error(str(self.get_connection_state())+" connection state\n")   
+        else:
+            time.sleep(self.timeout_limit)
+            conn = event.container.connect(self.server, user=self.user, password=self.password)
+            general_log.error("waited for "+str(self.timeout_limit)+" seconds\n")
+            for topic in self.send_topic:
+                self.sender = event.container.create_sender(conn, 'topic://%s' % topic)
+            self.connection = conn
+        
+        return super().on_disconnected(event)
+    
+    def get_connection_state(self):
+        """ Get current state of connection """
+        try:
+            state = self.connection.state
+            if state == 18:
+                self.timeout_limit = self.timeout_limit_min
+        except Exception:
+            general_log.error("Cannot get connection state")
+            return 0
+        return state
 
     def on_my_custom_send(self, event):
+        """ Function to send messages to the car client through AMQP broker """
         if self.sender_buffer and self.sender.credit:
             car_id_send = self.sender_buffer.pop(0)
             message_body = self.sender_buffer.pop(0)
@@ -85,6 +128,7 @@ class Publisher(MessagingHandler):
 
     def details(self):
         """For every message received from the CLM convert the message received into station id and payload"""
+
         payload_details = []
         if self.json_to_parse!={} and "message" in self.json_to_parse:
             dummy_msg = self.json_to_parse["message"]
@@ -133,7 +177,10 @@ class MS_ApiServer(RequestHandler):
             client_pub_two.sender_buffer.append(client_pub_two.details()[0])
             client_pub_two.sender_buffer.append(client_pub_two.details()[1])
             events_two.trigger(ApplicationEvent("my_custom_send"))
-        self.write((str((time.time()-rr_time_start)*1000))+" ms to process in RR")
+        json_form["rr_process_time"] =  (time.time()-rr_time_start)*1000
+        json_form["broker_one_conn_state"] = str(client_pub_one.get_connection_state())
+        json_form["broker_two_conn_state"] = str(client_pub_two.get_connection_state())
+        self.write(json_form)
   
     def put(self, id):
         """Handles the behaviour of PUT calls"""
@@ -159,7 +206,7 @@ class MS_ApiServer(RequestHandler):
 
 class LM_ApiServer(RequestHandler):
     def post(self, id):
-        """Handles the behaviour of POST calls from the local manager"""
+        """Handles the behaviour of POST calls from the local manager and the Maneuvering Service"""
         rr_time_start = time.time()
         json_form = json.loads(self.request.body)
         
@@ -182,7 +229,10 @@ class LM_ApiServer(RequestHandler):
             events_two.trigger(ApplicationEvent("my_custom_send"))
         lock_obj_one.acquire()
         lock_obj_two.acquire()
-        self.write((str((time.time()-rr_time_start)*1000))+" ms to process in RR")
+        json_form["rr_process_time"] =  (time.time()-rr_time_start)*1000
+        json_form["broker_one_conn_state"] = str(client_pub_one.get_connection_state())
+        json_form["broker_two_conn_state"] = str(client_pub_two.get_connection_state())
+        self.write(json_form)
         lock_obj_one.release()
         lock_obj_two.release()
   

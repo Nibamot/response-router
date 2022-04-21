@@ -2,7 +2,6 @@ import os
 import json
 import time
 import logging
-from time import sleep
 from threading import Thread
 from proton import Message
 from proton.handlers import MessagingHandler
@@ -24,11 +23,12 @@ def logger_setup(name, level=os.environ['LOG_LEVEL']):
     logger = logging.getLogger(name)
     logger.setLevel(level)
     logger.addHandler(sh)
+    logger.propagate = False
 
     return logger
 
 def logger_file_setup(name, file_name, level=os.environ['LOG_LEVEL']):
-    """Setup different file-loggers here"""
+    """Setup different file based loggers here"""
 
     file_handler = logging.FileHandler(file_name)
     file_handler.setFormatter(formatter)
@@ -72,24 +72,24 @@ class Publisher(MessagingHandler):
         self.connection = conn
     
     def on_disconnected(self, event):
+        """ Called when the connection between the client and the broker is disconnected """
+
         general_log.error("The connection to broker is lost. Trying to reestablish the connection")
         self.connection.close()
+
         if self.timeout_limit < self.timeout_limit_max:
             time.sleep(self.timeout_limit)
             conn = event.container.connect(self.server, user=self.user, password=self.password)
-            
             general_log.error("waited for "+str(self.timeout_limit)+" seconds\n")
             for topic in self.send_topic:
                 self.sender = event.container.create_sender(conn, 'topic://%s' % topic)
             self.connection = conn
             self.timeout_limit*=2
-            general_log.error(str(self.get_connection_state())+" connection state\n")
-            
+            general_log.error(str(self.get_connection_state())+" connection state\n")   
             
         else:
             time.sleep(self.timeout_limit)
             conn = event.container.connect(self.server, user=self.user, password=self.password)
-
             general_log.error("waited for "+str(self.timeout_limit)+" seconds\n")
             for topic in self.send_topic:
                 self.sender = event.container.create_sender(conn, 'topic://%s' % topic)
@@ -104,10 +104,13 @@ class Publisher(MessagingHandler):
             if state == 18:
                 self.timeout_limit = self.timeout_limit_min
         except Exception:
+            general_log.error("Cannot get connection state")
             return 0
         return state
 
     def on_my_custom_send(self, event):
+        """ Function to send messages to the car client through AMQP broker """
+
         if self.sender_buffer and self.sender.credit:
             car_id_send = self.sender_buffer.pop(0)
             message_body = self.sender_buffer.pop(0)
@@ -116,14 +119,18 @@ class Publisher(MessagingHandler):
             message = Message(body=message_body, properties={'Car_ID':car_id_send})#, 'ref_timestamp_fc':self.json_to_parse["ref_timestamp_fc"]}) 
             message.durable = True
             self.sender.send(message)
-            general_log.info("In Response router it takes "+str((time.time()-self.rr_time_start)*1000)+" ms to send")
+            #general_log.info("In Response router it takes "+str((time.time()-self.rr_time_start)*1000)+" ms to send")
+
 
     def on_sendable(self, event):
         """called after the sender is created only as a sender credit is made"""
+
         self.on_my_custom_send(event)
+
 
     def details(self):
         """For every message received from the CLM convert the message received into station id and payload"""
+
         payload_details = []
         if self.json_to_parse!={} and "message" in self.json_to_parse:
             dummy_msg = self.json_to_parse["message"]
@@ -156,7 +163,6 @@ class MS_ApiServer(RequestHandler):
         rr_time_start = time.time()
         json_form = json.loads(self.request.body)
         
-
         for ind_msg in json_form["messages"]:
             client_pub.json_to_parse = ind_msg
             client_pub.car_to_send = ind_msg["Car_ID"]
@@ -229,7 +235,7 @@ def make_app():
   return Application(urls, debug=True)
 
 
-  
+
 if __name__ == '__main__':
 
   app = make_app()

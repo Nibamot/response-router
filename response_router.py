@@ -181,9 +181,9 @@ class MS_ApiServer(RequestHandler):
         """Handles the behaviour of PUT calls"""
         pass
 
-    def get(self, id):
-        """Handles the behaviour of GET calls"""
-        self.write("Were you supposed to GET something?")
+    def get(self,id):
+        """ Get connection state with broker"""
+        self.write({"Connection_state":str(client_pub.get_connection_state())})
 
 
     def delete(self, id):

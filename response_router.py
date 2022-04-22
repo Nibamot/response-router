@@ -13,7 +13,7 @@ from tornado.ioloop import IOLoop
 #############################################################################################
 ################################ Logging #################################
 #############################################################################################
-
+testing_mode = os.environ['LOCK_TIME_MEASUREMENT']
 formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
 
 def logger_setup(name, level=os.environ['LOG_LEVEL']):
@@ -120,7 +120,8 @@ class Publisher(MessagingHandler):
             message.durable = True
             self.sender.send(message)
             time_log.info("In Response router it takes "+str((time.time()-self.rr_time_start)*1000)+" ms to send")
-            self.lock_obj.release()
+            if testing_mode:
+                self.lock_obj.release()
 
     def on_sendable(self, event):
         """called after the sender is created only as a sender credit is made"""
@@ -186,9 +187,11 @@ class MS_ApiServer(RequestHandler):
         """Handles the behaviour of PUT calls"""
         pass
 
-    def get(self, id):
-        """Handles the behaviour of GET calls"""
-        self.write("Were you supposed to GET something?")
+    
+    def get(self,id):
+        """handles GET calls"""
+        self.write({"connection_one":{"endpoint":os.environ['MSG_BROKER_ADDR_ONE'], "state":client_pub_one.get_connection_state()},
+                    "connection_two":{"endpoint":os.environ['MSG_BROKER_ADDR_TWO'], "state":client_pub_two.get_connection_state()}})
 
 
     def delete(self, id):
@@ -216,7 +219,8 @@ class LM_ApiServer(RequestHandler):
             client_pub_one.car_to_send = client_pub_one.json_to_parse["Car_ID"]
             client_pub_one.sender_buffer.append(client_pub_one.details()[0])
             client_pub_one.sender_buffer.append(client_pub_one.details()[1])
-            lock_obj_one.acquire()
+            if testing_mode:
+                lock_obj_one.acquire()
             events_one.trigger(ApplicationEvent("my_custom_send"))
         
             # tentative 
@@ -225,16 +229,19 @@ class LM_ApiServer(RequestHandler):
             client_pub_two.car_to_send = client_pub_two.json_to_parse["Car_ID"]
             client_pub_two.sender_buffer.append(client_pub_two.details()[0])
             client_pub_two.sender_buffer.append(client_pub_two.details()[1])
-            lock_obj_two.acquire()
+            if testing_mode:
+                lock_obj_two.acquire()
             events_two.trigger(ApplicationEvent("my_custom_send"))
-        lock_obj_one.acquire()
-        lock_obj_two.acquire()
+        if testing_mode:
+            lock_obj_one.acquire()
+            lock_obj_two.acquire()
         json_form["rr_process_time"] =  (time.time()-rr_time_start)*1000
         json_form["broker_one_conn_state"] = str(client_pub_one.get_connection_state())
         json_form["broker_two_conn_state"] = str(client_pub_two.get_connection_state())
         self.write(json_form)
-        lock_obj_one.release()
-        lock_obj_two.release()
+        if testing_mode:
+            lock_obj_one.release()
+            lock_obj_two.release()
   
     def put(self, id):
         """Handles the behaviour of PUT calls"""
@@ -243,9 +250,10 @@ class LM_ApiServer(RequestHandler):
         items = new_items
         self.write({'message': 'Item with id %s was updated' % id})
 
-    def get(self, id):
-        """Handles the behaviour of GET calls"""
-        self.write("Were you supposed to GET something?")
+    def get(self,id):
+        """ Get connection state of brokers"""
+        self.write({"connection_one":{"endpoint":os.environ['MSG_BROKER_ADDR_ONE'], "state":client_pub_one.get_connection_state()},
+                    "connection_two":{"endpoint":os.environ['MSG_BROKER_ADDR_TWO'], "state":client_pub_two.get_connection_state()}})
 
     def delete(self, id):
         """Handles the behaviour of DELETE calls"""

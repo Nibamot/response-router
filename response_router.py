@@ -241,7 +241,7 @@ if __name__ == '__main__':
   app = make_app()
   app.listen(os.environ['API_PORT'])
   print("Started Response Router 1 REST Server")
-  client_pub = Publisher(os.environ['MSG_BROKER_ADDR'])
+  client_pub = Publisher(os.environ['MSG_BROKER_ADDR_ONE'])
   container = Container(client_pub)
   events = EventInjector()
   container.selectable(events)
